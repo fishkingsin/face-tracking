@@ -52,10 +52,8 @@
 		
 		
 
-
-		private var EYE_DETECTION_AREA		: Rectangle = new Rectangle(0,0, VIDEO_WIDTH, VIDEO_HEIGHT/2);
 		private var eyes					: Object = new Object();
-		private var faceBounds				: Rectangle;
+		private var faceRect				: Rectangle;
 		
 		
 		private var DEFAULT_POINT			: Point = new Point(0,0);
@@ -174,11 +172,11 @@
 			//bmFiltered.threshold(bmFiltered, rect, new Point(0,0), ">", 0x66, 0xFFFFFFFF, 0xFF);
 			
 			// Find the approximate face position and it's rectangle
-			faceBounds = findFacePositions(bmFiltered);
-			faceBounds.x *= scaleAmount;
-			faceBounds.y *= scaleAmount;
-			faceBounds.width *= scaleAmount;
-			faceBounds.height *= scaleAmount;
+			faceRect = findFacePositions(bmFiltered);
+			faceRect.x *= scaleAmount;
+			faceRect.y *= scaleAmount;
+			faceRect.width *= scaleAmount;
+			faceRect.height *= scaleAmount;
 
 			// Make the pic bigger
 			m.identity();
@@ -186,9 +184,9 @@
 			bmFace.draw(bmFiltered, m);			
 			
 			// Create a green bordered face rectangle helper shape
-			var faceRect:Shape = new Shape();
-			faceRect.graphics.lineStyle(1, 0x0000FF);
-			faceRect.graphics.drawRect(faceBounds.x, faceBounds.y, faceBounds.width, faceBounds.height);
+			var faceBorders:Shape = new Shape();
+			faceBorders.graphics.lineStyle(1, 0x0000FF);
+			faceBorders.graphics.drawRect(faceRect.x, faceRect.y, faceRect.width, faceRect.height);
 			
 			// Draw the face area helper image
 			drawToSprite(sprite3, bmFace);
@@ -207,8 +205,8 @@
 										0, 0, 0, 1, 0];
 			
 			var blueScaleFilter:ColorMatrixFilter = new ColorMatrixFilter(blueScaleArray);
-			bmEdges.applyFilter(bmEdges, faceBounds, faceBounds.topLeft, blueScaleFilter);			
-			//bmEdges.applyFilter(bmEdges, faceBounds, faceBounds.topLeft, GAUSSIAN_3BY3);
+			bmEdges.applyFilter(bmEdges, faceRect, faceRect.topLeft, blueScaleFilter);			
+			//bmEdges.applyFilter(bmEdges, faceRect, faceRect.topLeft, GAUSSIAN_3BY3);
 			
 			var HORIZONTAL_SOBEL:ConvolutionFilter = new ConvolutionFilter(3,3,
 			  [-1,-2,-1,
@@ -224,18 +222,18 @@
 			//			    -1,-1], 1, 127);
 			
 			var horizontalEdge:BitmapData = new BitmapData(VIDEO_WIDTH, VIDEO_HEIGHT);
-			horizontalEdge.applyFilter(bmEdges, faceBounds, faceBounds.topLeft, HORIZONTAL_SOBEL);
+			horizontalEdge.applyFilter(bmEdges, faceRect, faceRect.topLeft, HORIZONTAL_SOBEL);
 			var verticalEdge:BitmapData = new BitmapData(VIDEO_WIDTH, VIDEO_HEIGHT);
-			verticalEdge.applyFilter(bmEdges, faceBounds, faceBounds.topLeft, VERTICAL_SOBEL);
+			verticalEdge.applyFilter(bmEdges, faceRect, faceRect.topLeft, VERTICAL_SOBEL);
 			
 			bmEdges.fillRect(rect, 0xFFFFFFFF);
-			//bmEdges.threshold(horizontalEdge, faceBounds, faceBounds.topLeft, "<", 0x22, 0xFF000000, 0xFF);
-			bmEdges.threshold(horizontalEdge, faceBounds, faceBounds.topLeft, ">", 0xDD, 0xFF000000, 0xFF);
-			bmEdges.threshold(verticalEdge, faceBounds, faceBounds.topLeft, "<", 0x22, 0xFF000000, 0xFF);
-			bmEdges.threshold(verticalEdge, faceBounds, faceBounds.topLeft, ">", 0xDD, 0xFF000000, 0xFF);
+			//bmEdges.threshold(horizontalEdge, faceRect, faceRect.topLeft, "<", 0x22, 0xFF000000, 0xFF);
+			bmEdges.threshold(horizontalEdge, faceRect, faceRect.topLeft, ">", 0xDD, 0xFF000000, 0xFF);
+			bmEdges.threshold(verticalEdge, faceRect, faceRect.topLeft, "<", 0x22, 0xFF000000, 0xFF);
+			bmEdges.threshold(verticalEdge, faceRect, faceRect.topLeft, ">", 0xDD, 0xFF000000, 0xFF);
 			drawToSprite(sprite6, bmEdges);
 			drawToSprite(sprite5, verticalEdge);
-			//findEdges(bmEdges, faceBounds);
+			//findEdges(bmEdges, faceRect);
 			//drawToSprite(sprite6, bmEdges);
 			*/
 
@@ -243,13 +241,13 @@
 			/*
 			// Contrasted
 			bmContrast = bmBase.clone();			
-			bmContrast.applyFilter(bmContrast, faceBounds, faceBounds.topLeft, contrastCmf);
+			bmContrast.applyFilter(bmContrast, faceRect, faceRect.topLeft, contrastCmf);
 			//drawToSprite(sprite5, bmContrast);
 
 			// Preprocess the detected face area for eye detection
 			bmEyes.fillRect(rect, 0xFFFFFFFF);
-			bmContrast.applyFilter(bmContrast, faceBounds, faceBounds.topLeft, blur);
-			bmEyes.threshold(bmContrast, faceBounds, faceBounds.topLeft, "<", COLOR_THRESHOLD, 0xFF000000, 0x00FFFFFF);
+			bmContrast.applyFilter(bmContrast, faceRect, faceRect.topLeft, blur);
+			bmEyes.threshold(bmContrast, faceRect, faceRect.topLeft, "<", COLOR_THRESHOLD, 0xFF000000, 0x00FFFFFF);
 			drawToSprite(sprite1, bmEyes);
 			*/
 			//bmEyes = bmFace.clone();
@@ -258,12 +256,19 @@
 			
 			// Draw the base image with the detected areas
 			bmFinal = bmBase;
-			bmFinal.draw(faceRect);			
+			bmFinal.draw(faceBorders);			
 			drawToSprite(sprite4, bmFinal);
 						
 			// Find the potential eye shapes. These are round shapes. Add these eyes into the eye models list.
-			findEyes(bmEyes);
+			var eyesRect:Rectangle = new Rectangle(faceRect.x, faceRect.y+faceRect.height*0.1, faceRect.width, faceRect.height*0.5);
+			findEyes(bmEyes, eyesRect);
 			eyes.models.sort(sortByRelevance);
+			
+			// Create a green bordered face rectangle helper shape
+			var eyesBorders:Shape = new Shape();
+			eyesBorders.graphics.lineStyle(1, 0x00FF00);
+			eyesBorders.graphics.drawRect(eyesRect.x, eyesRect.y, eyesRect.width, eyesRect.height);
+			bmFinal.draw(eyesBorders);			
 			
 			// Find eye pairs from the list of eye models
 			findEyePairs();
@@ -604,7 +609,7 @@
 					
 					// Check if the relative location of the eyes are correct
 					var xDist:uint = Math.abs(m.p.x - other.p.x);
-					if (Math.abs(m.p.y - other.p.y) > 40 || xDist > faceBounds.width || xDist < faceBounds.width*0.3){
+					if (Math.abs(m.p.y - other.p.y) > 40 || xDist > faceRect.width || xDist < faceRect.width*0.3){
 						continue;
 					}
 					
@@ -685,15 +690,15 @@
 		// Finds eye positions
 		// Find eye positions by looking for monitor reflection on the eye. So find circle shaped black balls that have a white center.
 		// Don't find up only left, right, down and diagonally down.
-		private function findEyes(bmd) : void {
+		private function findEyes(bmd, eyesRect) : void {
 			bmTarget = bmd;
 			var x:uint = 0;
 			var hits:Array = [];
 			eyes.hits = [];
 			
-			for (var y:uint=EYE_DETECTION_AREA.top; y<EYE_DETECTION_AREA.bottom; y+=1){
-				x = EYE_DETECTION_AREA.left;
-				while (x<EYE_DETECTION_AREA.right){
+			for (var y:uint=eyesRect.top; y<eyesRect.bottom; y+=1){
+				x = eyesRect.left;
+				while (x<eyesRect.right){
 					var hit:Object = findBlack(x, y);
 					
 					if (hit == null) {
