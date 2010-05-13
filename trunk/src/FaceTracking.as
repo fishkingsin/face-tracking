@@ -62,16 +62,13 @@
 		private var fpsCount 				: uint = 0;
 		private var fpsTimer 				: uint = 0;
 		
-		private var COLOR_THRESHOLD			: uint = 0x00888888;
+		private static var MAX_CHROMATICITY	: uint = 60;
 		
 		
 		
 		
 		public function FaceTracking() {
 			
-			slider1_mc.value = 10;
-			slider2_mc.value = 7;
-						
 			eyes.models = [];
 			eyes.hits = [];
 			eyes.pairs = [];
@@ -138,22 +135,13 @@
 		private function drawFrame(aEvent : Event) : void {
 			var startTime:Date = new Date();
 			var rect:Rectangle = new Rectangle(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT);
-			var blur:BlurFilter = new BlurFilter(2,2,2);
-			
-			COLOR_THRESHOLD = greyColor(0, slider2_mc.value*25);
-			
-			var a:Number = slider1_mc.value/slider1_mc.maximum * 11;
-			var b:Number = 3.5 - (slider1_mc.value/slider1_mc.maximum * 698.5);
-			var matrix:Array = new Array();
-            matrix = matrix.concat([a, 0, 0, 0, b]); // red
-            matrix = matrix.concat([0, a, 0, 0, b]); // green
-            matrix = matrix.concat([0, 0, a, 0, b]); // blue
-            matrix = matrix.concat([0, 0, 0, 1, 0]); // alpha
-			var contrastCmf:ColorMatrixFilter = new ColorMatrixFilter(matrix);
+			var blur:BlurFilter = new BlurFilter(2,2,2);			
 			var GAUSSIAN_3BY3:ConvolutionFilter = new ConvolutionFilter(3,3,[ 1,2,1,
  																		 	  2,4,2,
 																			  1,2,1], 16);
-
+			
+			MAX_CHROMATICITY = chromaticity_mc.value;
+			
 			//	Copy the latest still-frame of the webcam video into the BitmapData object for detection
 			bmBase.draw(video1);
 			
@@ -166,13 +154,15 @@
 			var m:Matrix = new Matrix();
 		    m.scale(scale, scale);
 			bmFiltered.draw(bmBase, m);
+			//bmEyes = bmFiltered.clone();
 			//bmFiltered.applyFilter(bmFiltered, rect, new Point(0,0), GAUSSIAN_3BY3);
 			bmFiltered.applyFilter(bmFiltered, rect, new Point(0,0), blur);
 			filterSkin(bmFiltered);
 			//bmFiltered.threshold(bmFiltered, rect, new Point(0,0), ">", 0x66, 0xFFFFFFFF, 0xFF);
 			
 			// Find the approximate face position and it's rectangle
-			faceRect = findFacePositions(bmFiltered);
+			var faceRectSmall:Rectangle = findFacePositions(bmFiltered);
+			faceRect = faceRectSmall.clone();
 			faceRect.x *= scaleAmount;
 			faceRect.y *= scaleAmount;
 			faceRect.width *= scaleAmount;
@@ -192,84 +182,35 @@
 			drawToSprite(sprite3, bmFace);
 			
 			
-			
-			
-
-			// Find edges
-			/*
-			bmEdges = bmBase.clone();
-			var third:Number = 1 / 3;
-			var blueScaleArray:Array = [third, third, third, 0, 0,
-										third, third, third, 0, 0,
-										third, third, third, 0, 0,
-										0, 0, 0, 1, 0];
-			
-			var blueScaleFilter:ColorMatrixFilter = new ColorMatrixFilter(blueScaleArray);
-			bmEdges.applyFilter(bmEdges, faceRect, faceRect.topLeft, blueScaleFilter);			
-			//bmEdges.applyFilter(bmEdges, faceRect, faceRect.topLeft, GAUSSIAN_3BY3);
-			
-			var HORIZONTAL_SOBEL:ConvolutionFilter = new ConvolutionFilter(3,3,
-			  [-1,-2,-1,
-			    0, 0, 0,
-				1, 2, 1], 1, 127);
-			//			  [ 1, -1,
-			//			    1, -1], 1, 127);
-			var VERTICAL_SOBEL:ConvolutionFilter = new ConvolutionFilter(3,3,
-			  [ 1, 0,-1,
-			    2, 0,-2,
-			    1, 0,-1], 1, 127);
-			//			  [ 1, 1,
-			//			    -1,-1], 1, 127);
-			
-			var horizontalEdge:BitmapData = new BitmapData(VIDEO_WIDTH, VIDEO_HEIGHT);
-			horizontalEdge.applyFilter(bmEdges, faceRect, faceRect.topLeft, HORIZONTAL_SOBEL);
-			var verticalEdge:BitmapData = new BitmapData(VIDEO_WIDTH, VIDEO_HEIGHT);
-			verticalEdge.applyFilter(bmEdges, faceRect, faceRect.topLeft, VERTICAL_SOBEL);
-			
-			bmEdges.fillRect(rect, 0xFFFFFFFF);
-			//bmEdges.threshold(horizontalEdge, faceRect, faceRect.topLeft, "<", 0x22, 0xFF000000, 0xFF);
-			bmEdges.threshold(horizontalEdge, faceRect, faceRect.topLeft, ">", 0xDD, 0xFF000000, 0xFF);
-			bmEdges.threshold(verticalEdge, faceRect, faceRect.topLeft, "<", 0x22, 0xFF000000, 0xFF);
-			bmEdges.threshold(verticalEdge, faceRect, faceRect.topLeft, ">", 0xDD, 0xFF000000, 0xFF);
-			drawToSprite(sprite6, bmEdges);
-			drawToSprite(sprite5, verticalEdge);
-			//findEdges(bmEdges, faceRect);
-			//drawToSprite(sprite6, bmEdges);
-			*/
-
-
-			/*
-			// Contrasted
-			bmContrast = bmBase.clone();			
-			bmContrast.applyFilter(bmContrast, faceRect, faceRect.topLeft, contrastCmf);
-			//drawToSprite(sprite5, bmContrast);
-
-			// Preprocess the detected face area for eye detection
-			bmEyes.fillRect(rect, 0xFFFFFFFF);
-			bmContrast.applyFilter(bmContrast, faceRect, faceRect.topLeft, blur);
-			bmEyes.threshold(bmContrast, faceRect, faceRect.topLeft, "<", COLOR_THRESHOLD, 0xFF000000, 0x00FFFFFF);
-			drawToSprite(sprite1, bmEyes);
-			*/
-			//bmEyes = bmFace.clone();
-			bmEyes.fillRect(rect, 0xFFFFFFFF);
-			drawToSprite(sprite1, bmEyes);
-			
 			// Draw the base image with the detected areas
 			bmFinal = bmBase;
 			bmFinal.draw(faceBorders);			
 			drawToSprite(sprite4, bmFinal);
 						
-			// Find the potential eye shapes. These are round shapes. Add these eyes into the eye models list.
+			// Preprocess the detected face area for eye detection
+			var eyesRectSmall:Rectangle = new Rectangle(faceRectSmall.x, faceRectSmall.y+faceRectSmall.height*0.1, faceRectSmall.width, faceRectSmall.height*0.5);
 			var eyesRect:Rectangle = new Rectangle(faceRect.x, faceRect.y+faceRect.height*0.1, faceRect.width, faceRect.height*0.5);
-			findEyes(bmEyes, eyesRect);
-			eyes.models.sort(sortByRelevance);
+			//bmEyes.applyFilter(bmEyes, faceRectSmall, faceRectSmall.topLeft, GAUSSIAN_3BY3);
+			bmEyes = bmFiltered.clone();
+			//preprocessEyesArea(bmEyes, bmEyes, eyesRectSmall);
+			
+			// Find the potential eye shapes. These are round shapes. Add these eyes into the eye models list.
+			eyes.hits = findEyes(bmEyes, eyesRectSmall);
+			//eyes.models.sort(sortByRelevance);
+			drawToSprite(sprite1, bmEyes);
 			
 			// Create a green bordered face rectangle helper shape
 			var eyesBorders:Shape = new Shape();
 			eyesBorders.graphics.lineStyle(1, 0x00FF00);
 			eyesBorders.graphics.drawRect(eyesRect.x, eyesRect.y, eyesRect.width, eyesRect.height);
-			bmFinal.draw(eyesBorders);			
+			bmFinal.draw(eyesBorders);
 			
+			// Find an eye pair from the list of eye hits
+			findEyePairs(eyesRect);
+			drawEyePairs(bmEyes);
+			drawEyePairs(bmFinal, scaleAmount);
+
+			/*
 			// Find eye pairs from the list of eye models
 			findEyePairs();
 			eyes.pairs.sort(sortByRelevance);
@@ -282,6 +223,7 @@
 			
 			// Decrement and remove non relevant eye models
 			maintainEyeModels();
+			*/
 
 			debug_txt.text = 'Hits:' + eyes.hits.length + ' Models:' + eyes.models.length + ' Pairs:' + eyes.pairs.length;
 			
@@ -296,121 +238,7 @@
 			} 
 			fpsCount++;
 		}
-		
-		
-		function findEdges(bmd, rect):void {
-			// Get pixels and loop through them
-			var pixels:ByteArray = bmd.getPixels(rect);
-			pixels.position = 0;
-			var c:uint;
-			var r:uint;
-			var g:uint;
-			var b:uint;
-			var prevB:uint;
-			
-			c = pixels.readUnsignedInt();
-			prevB = c & 0xFF;
-			
-			while (pixels.bytesAvailable > 0) {
-				c = pixels.readUnsignedInt();
-				// Normalize the color
-				r = c >> 16 & 0xFF;
-				g = c >> 8 & 0xFF;
-				b = c & 0xFF;
-				
-				if (Math.abs(b-prevB) > 100) {
-					// Found an edge
-					pixels.position -= 4;
-					pixels.writeUnsignedInt(0xFF00FF00);
-					pixels.writeUnsignedInt(0xFF00FF00);
-					//pixels.position += 4;
-				}
-				prevB = b;
-				pixels.position += 4;
-			}
-			pixels.position = 0;
-			bmd.setPixels(rect, pixels);			
-		}		
-		
 
-		// Finds all potential face positions
-		private function findFacePositionsOld(bmd) : Rectangle {
-			var w:uint = bmd.width;
-			var h:uint = bmd.height;
-			var x:uint;
-			var y:uint;
-			var c:uint;
-			var target:Object = new Object();
-			target.x = 0 as uint;
-			target.y = 0 as uint;
-			target.w = 0 as uint;
-			var currentWidth:int = 0;
-			
-			// First find the widest black line
-			var hLimit:uint = h*0.8;
-			for (y=0; y<hLimit; y++){
-				for (x=0; x<w; x++){
-					c = bmd.getPixel(x, y);
-					if (c != 0 || x == w-1) {
-						if (currentWidth > target.w){
-							target.w = currentWidth;
-							if (x == w-1) target.w++;
-							target.y = y;
-							target.x = x - currentWidth;
-						}
-						currentWidth = 0;
-					} else {
-						currentWidth++;
-					}
-				}
-			}
-			bmd.fillRect(new Rectangle(target.x, target.y, target.w, 1), 0xFFFF0000);
-			
-			// Now we know where is the widest point. Next let's find the highest point on the widest line.
-			var maxUp:int = 0;
-			var maxDown:int = 0;
-			var currentHeight:int = 0;
-			for (x=target.x; x<target.x+target.w; x++){
-				// First look up
-				y = target.y;
-				while (y-- > 0){
-					//trace('y=' + y);
-					c = bmd.getPixel(x, y);
-					if (c != 0 || y == 0) {
-						if (currentHeight > maxUp){
-							maxUp = currentHeight;
-						}
-						currentHeight = 0;
-					} else {
-						currentHeight++;
-					}
-				}
-				// Then look down
-				y = target.y;
-				while (++y < h){
-					c = bmd.getPixel(x, y);
-					if (c != 0 || y == h-1) {
-						if (currentHeight > maxDown){
-							maxDown = currentHeight;
-						}
-						currentHeight = 0;
-					} else {
-						currentHeight++;
-					}
-				}
-				
-			}			
-			
-			// Finally we can make a rectangle out of the data
-			
-			var boundsRect:Rectangle = new Rectangle(target.x, target.y-maxUp, target.w, maxUp+maxDown);
-			var rect:Shape = new Shape();
-			rect.graphics.lineStyle(1, 0x0000FF);
-			rect.graphics.drawRect(boundsRect.x, boundsRect.y, boundsRect.width, boundsRect.height);
-			bmd.draw(rect);
-			return boundsRect;
-		}		
-		
 		// Finds all potential face positions
 		private function findFacePositions(bmd) : Rectangle {
 			var w:uint = bmd.width;
@@ -447,7 +275,6 @@
 			}
 
 			// Finally we can make a rectangle out of the data
-
 			var found:Shape = new Shape();
 			found.graphics.lineStyle(1, 0x0000FF);
 			found.graphics.drawRect(bestFace.x, bestFace.y, bestFace.width, bestFace.height);
@@ -479,7 +306,6 @@
 			var chroma:uint;
 			while (pixels.bytesAvailable > 0) {
 				c = pixels.readUnsignedInt();
-				// Normalize the color
 				r = c >> 16 & 0xFF;
 				g = c >> 8 & 0xFF;
 				b = c & 0xFF;
@@ -489,7 +315,7 @@
 				
 				// Filter with chromatisity
 				if (skin_chroma_mc.selected) {
-					if (chroma < 50) {
+					if (chroma < MAX_CHROMATICITY) {
 						// This is not a skin pixel
 						pixels.position -= 4;
 						pixels.writeUnsignedInt(0xFFFFFFFF);
@@ -563,18 +389,17 @@
 			}
 		}
 		
-		private function drawEyePairs(bmd:BitmapData, drawCount:uint = 100) : void {
+		private function drawEyePairs(bmd:BitmapData, scale:uint = 1) : void {
 			for (var i in eyes.pairs){
 				var pair:Object = eyes.pairs[i];
 
 				var rect:Shape = new Shape();    
 				rect.graphics.lineStyle(2, 0xFF0000);
-				rect.graphics.drawRect(pair.e1.p.x-pair.e1.radius, pair.e1.p.y-pair.e1.radius, pair.e1.w, pair.e1.w);
+				rect.graphics.drawRect(pair.e1.x*scale, pair.e1.y*scale, pair.e1.width*scale, pair.e1.height*scale);
 				bmd.draw(rect);
 				
-				rect.graphics.drawRect(pair.e2.p.x-pair.e2.radius, pair.e2.p.y-pair.e2.radius, pair.e2.w, pair.e2.w);
+				rect.graphics.drawRect(pair.e2.x*scale, pair.e2.y*scale, pair.e2.width*scale, pair.e2.height*scale);
 				bmd.draw(rect);
-				if (--drawCount == 0) return;
 			}
 		}
 		// Draw drawCount eye models. Sorted by relevance.
@@ -594,7 +419,7 @@
 		}
 		
 		// Find eye pairs from the eye models based on relative location and size
-		private function findEyePairs() : void {
+		private function findEyePairsOld() : void {
 			eyes.pairs =[];
 
 			// Loop through all potential eye models
@@ -635,6 +460,42 @@
 						pair.e1 = other;
 						pair.e2 = m;
 					}
+					eyes.pairs.push(pair);
+				}
+			}
+		}
+		
+		// Find eye pairs from the eye hits based on relative location and size
+		private function findEyePairs(eyesRect) : void {
+			eyes.pairs =[];
+
+			// Loop through all potential eye hits
+			for (var i in eyes.hits){
+				var m:Object = eyes.hits[i];
+				// For each eye hit try to find a pair. 
+				for (var j in eyes.hits){
+					var other:Object = eyes.hits[j];
+					if (m == other) continue;
+					
+					// Only check eyes that are on the right side of the current one
+					if (m.x > other.x) {
+						continue;
+					}
+					
+					// Check if the relative location of the eyes are correct
+					var xDist:uint = other.x - m.x;
+					if (Math.abs(m.y - other.y) > m.height*2 || xDist > eyesRect.width*0.7 || xDist < eyesRect.width*0.1){
+						continue;
+					}
+					
+					// Check for the relative size of the eyes
+					if (Math.abs(m.width - other.width) > m.width*0.5 || Math.abs(m.height - other.height) > m.height*0.5){
+						continue;
+					}
+										
+					var pair:Object = new Object();
+					pair.e1 = m;
+					pair.e2 = other;
 					eyes.pairs.push(pair);
 				}
 			}
@@ -687,122 +548,78 @@
 		}
 			
 
+		private function preprocessEyesArea(bmdSrc, bmdDest, eyesRect) : void {
+			// Get pixels and loop through them
+			var pixels:ByteArray = bmdSrc.getPixels(eyesRect);
+			pixels.position = 0;
+			var c:uint;
+			var cPrev:uint = 100;
+			var r:uint;
+			var g:uint;
+			var b:uint;
+			var max:uint;
+			var min:uint;
+			var sat:uint;
+			var chroma:uint;
+			while (pixels.bytesAvailable > 0) {
+				c = pixels.readUnsignedInt();
+				r = c >> 16 & 0xFF;
+				g = c >> 8 & 0xFF;
+				b = c & 0xFF;
+				max = Math.max(r,  b);
+				min = Math.min(r,  b);
+				chroma = max-min;
+				
+				// Filter with chromaticity
+				if (chroma < MAX_CHROMATICITY || cPrev < MAX_CHROMATICITY) {
+					// This is not a skin pixel
+					pixels.position -= 4;
+					pixels.writeUnsignedInt(0xFF000000);
+				} else {
+					pixels.position -= 4;
+					pixels.writeUnsignedInt(0xFFFFFFFF);					
+				}
+				cPrev = c;
+			}
+			pixels.position = 0;
+			bmdDest.setPixels(eyesRect, pixels);			
+		}
+		
 		// Finds eye positions
-		// Find eye positions by looking for monitor reflection on the eye. So find circle shaped black balls that have a white center.
-		// Don't find up only left, right, down and diagonally down.
-		private function findEyes(bmd, eyesRect) : void {
-			bmTarget = bmd;
-			var x:uint = 0;
-			var hits:Array = [];
-			eyes.hits = [];
-			
-			for (var y:uint=eyesRect.top; y<eyesRect.bottom; y+=1){
-				x = eyesRect.left;
-				while (x<eyesRect.right){
-					var hit:Object = findBlack(x, y);
-					
-					if (hit == null) {
-						// End of the horizontal line. Go to next line.
-						break;
-					}
-					if (hit.w > 5 && hit.w < 20) {
-						// It was a hit
-						//bmTarget.fillRect(new Rectangle(hit.x1, hit.p.y, hit.w, 1), 0xFFFF9900);
-						
-						if (checkCircleShape(hit)){
-							bmTarget.fillRect(new Rectangle(hit.x1, hit.p.y, hit.w, 1), 0xFFFF0000);
-							hit.rank = 0;
-							addEyeModel(hit);
-							eyes.hits.push(hit);
+		private function findEyes(bmd, eyesRect) : Array {
+			var w:uint = bmd.width;
+			var h:uint = bmd.height;
+			var x:uint;
+			var y:uint;
+			var c:uint;
+			var floodColor:uint = 0xFF00FF00;
+			var eyes:Array = [];
+			var rect:Rectangle;
+			var maxSize:uint = eyesRect.width*0.2;
+
+			// First find a black area of pixels
+			for (y=eyesRect.y; y<h; y+=2){
+				for (x=eyesRect.x; x<w; x+=2){
+					c = bmd.getPixel(x, y);
+					if (c == 0xFFFFFF) {
+						// Found a potential aread
+						floodColor += 1;
+						bmd.floodFill(x, y, floodColor);
+						rect = bmd.getColorBoundsRect(0xFFFFFFFF, floodColor, true);
+						if (rect.width < maxSize && rect.height < maxSize){
+							// Found one eye
+							eyes.push(rect);
+							/*
+							var found:Shape = new Shape();
+							found.graphics.lineStyle(1, 0xFF0000FF);
+							found.graphics.drawRect(rect.x, rect.y, rect.width, rect.height);
+							bmd.draw(found);
+							*/
 						}
 					}
-					x = hit.x2+1;
 				}
 			}
-		}
-		
-		// Finds black pixels on x axis. 
-		private function findBlack(xStart, yStart): Object {
-			var p:Point = new Point(xStart, yStart);
-			var color:uint;
-			
-			// Search for black, stop if found.
-			while (bmTarget.getPixel32(p.x, p.y) != 0xFF000000){
-				if (++p.x >= VIDEO_WIDTH) return null;
-			}
-			
-			var hit:Object = new Object();
-			hit.x1 = p.x;
-
-			// Search for the end of black, stop if found.
-			while (p.x < VIDEO_WIDTH){
-				color = bmTarget.getPixel32(p.x, p.y);
-				if (color != 0xFF000000) {
-					// Check if the next pixel is black, if so then discard the lonely one white pixel
-					if (bmTarget.getPixel32(++p.x, p.y) == 0xFF000000) {
-						continue;
-					}
-					break;
-				}
-				p.x++;
-			}
-			hit.x2 = p.x - 1;
-			hit.w = hit.x2 - hit.x1;
-			hit.radius = hit.w / 2;			
-			hit.p = new Point(hit.x1 + hit.radius, yStart);
-			return hit;
-		}
-		
-		
-		// Check for a circle shape. Look down and diagonally down.
-		private function checkCircleShape(hit) : Boolean {
-			var lengths:Array = [];
-			var lenDiffs:Array = [0.3, 0.3, 0.3, 0.3, 0.6];
-			var vectors:Array = [new Point(0, 1), new Point(-1, 1), new Point(1, 1), new Point(0, -1)];
-			var len:int;
-
-			for (var i in vectors){
-				len = checkVectorHit(hit, vectors[i], hit.radius*(1+lenDiffs[i]));
-				if (len > hit.radius*(1+lenDiffs[i]) || len < hit.radius*(1-lenDiffs[i])) {
-					return false;
-				}
-				lengths.push(len);
-				if (len == -1) return false;
-			}
-			
-			for (var a in vectors){
-				len = lengths[a];
-				var line:Shape = new Shape();    
-				line.graphics.lineStyle(1, 0x00FF00);
-				line.graphics.moveTo(hit.p.x, hit.p.y);
-				line.graphics.lineTo(hit.p.x+vectors[a].x*len, hit.p.y+vectors[a].y*len);
-				bmTarget.draw(line);
-			}			
-			
-			return true;
-		}
-
-		
-		// Finds black pixels on the vector. Returns the length until the hit point or -1 for not found after maxDist has been moved.
-		private function checkVectorHit(hit, vec, maxDist) : int {
-			var p:Point = new Point(hit.p.x,hit.p.y);
-			var dist:uint = 0;
-			vec.normalize(1);
-
-			while (p.y < VIDEO_HEIGHT && p.y > 0 && dist < maxDist){
-				if (bmTarget.getPixel32(p.x, p.y) != 0xFF000000) {
-					// Check if the next pixel is black, if so then discard the lonely one white pixel
-					p = p.add(vec);
-					if (bmTarget.getPixel32(p.x, p.y) != 0xFF000000) {
-						return dist;
-					}
-
-				} else {
-					p = p.add(vec);
-				}
-				dist++;
-			}				
-			return -1;
+			return eyes;
 		}
 		
 
