@@ -206,7 +206,7 @@
 			bmFinal.draw(eyesBorders);
 			
 			// Find an eye pair from the list of eye hits
-			findEyePairs(eyesRect);
+			findEyePairs(eyesRectSmall);
 			drawEyePairs(bmEyes);
 			drawEyePairs(bmFinal, scaleAmount);
 
@@ -417,85 +417,45 @@
 				if (--drawCount == 0) return;
 			}
 		}
-		
-		// Find eye pairs from the eye models based on relative location and size
-		private function findEyePairsOld() : void {
-			eyes.pairs =[];
-
-			// Loop through all potential eye models
-			for (var i in eyes.models){
-				var m:Object = eyes.models[i];
-				if (m.relevance < 10) continue;
-				// For each eye model try to find a pair. 
-				for (var j in eyes.models){
-					var other:Object = eyes.models[j];
-					if (m == other) continue;
-					if (other.relevance < 10) continue;
-					
-					// Check if the relative location of the eyes are correct
-					var xDist:uint = Math.abs(m.p.x - other.p.x);
-					if (Math.abs(m.p.y - other.p.y) > 40 || xDist > faceRect.width || xDist < faceRect.width*0.3){
-						continue;
-					}
-					
-					// Check for the relative size of the eyes
-					if (Math.abs(m.radius - other.radius) > m.radius*0.2){
-						continue;
-					}
-					
-					// These models qualify as pairs
-					m.paired += 15;
-					other.paired += 15;
-					
-					// Since these models are pairs, they are more relevant
-					//m.relevance++;
-					//other.relevance++;
-					
-					var pair:Object = new Object();
-					pair.relevance = m.paired + other.paired;
-					if (m.p.x < other.p.x) {
-						pair.e1 = m;
-						pair.e2 = other;
-					} else {
-						pair.e1 = other;
-						pair.e2 = m;
-					}
-					eyes.pairs.push(pair);
-				}
-			}
-		}
-		
+				
 		// Find eye pairs from the eye hits based on relative location and size
 		private function findEyePairs(eyesRect) : void {
 			eyes.pairs =[];
 
 			// Loop through all potential eye hits
 			for (var i in eyes.hits){
-				var m:Object = eyes.hits[i];
+				var left:Rectangle = eyes.hits[i];
 				// For each eye hit try to find a pair. 
 				for (var j in eyes.hits){
-					var other:Object = eyes.hits[j];
-					if (m == other) continue;
+					var right:Rectangle = eyes.hits[j];
+					if (left == right) continue;
 					
 					// Only check eyes that are on the right side of the current one
-					if (m.x > other.x) {
+					if (left.x > right.x) {
+						continue;
+					}
+					
+					// Left eye on left side and right eye on right side
+					var halfPoint:uint = eyesRect.x + eyesRect.width/2;
+					if (left.right > halfPoint || right.x < halfPoint) {
 						continue;
 					}
 					
 					// Check if the relative location of the eyes are correct
-					var xDist:uint = other.x - m.x;
-					if (Math.abs(m.y - other.y) > m.height*2 || xDist > eyesRect.width*0.7 || xDist < eyesRect.width*0.1){
+					var xDist:uint = right.x - left.x;
+					if (Math.abs(left.y - right.y) > eyesRect.width*0.1 || xDist > eyesRect.width*0.7 || xDist < eyesRect.width*0.3){
 						continue;
 					}
 					
 					// Check for the relative size of the eyes
-					if (Math.abs(m.width - other.width) > m.width*0.5 || Math.abs(m.height - other.height) > m.height*0.5){
+					/*
+					if (Math.abs(left.width - right.width) > left.width*0.5 || Math.abs(left.height - right.height) > left.height*0.5){
 						continue;
-					}
+					}*/
 										
 					var pair:Object = new Object();
-					pair.e1 = m;
-					pair.e2 = other;
+					pair.e1 = left;
+					pair.e2 = right;
 					eyes.pairs.push(pair);
 				}
 			}
@@ -587,26 +547,25 @@
 		
 		// Finds eye positions
 		private function findEyes(bmd, eyesRect) : Array {
-			var w:uint = bmd.width;
-			var h:uint = bmd.height;
 			var x:uint;
 			var y:uint;
 			var c:uint;
 			var floodColor:uint = 0xFF00FF00;
 			var eyes:Array = [];
 			var rect:Rectangle;
-			var maxSize:uint = eyesRect.width*0.2;
+			var maxSize:uint = eyesRect.width*0.3;
+			var minSize:uint = eyesRect.width*0.05;
 
 			// First find a black area of pixels
-			for (y=eyesRect.y; y<h; y+=2){
-				for (x=eyesRect.x; x<w; x+=2){
+			for (y=eyesRect.y; y<eyesRect.bottom; y+=2){
+				for (x=eyesRect.x; x<eyesRect.right; x+=2){
 					c = bmd.getPixel(x, y);
 					if (c == 0xFFFFFF) {
 						// Found a potential aread
 						floodColor += 1;
 						bmd.floodFill(x, y, floodColor);
 						rect = bmd.getColorBoundsRect(0xFFFFFFFF, floodColor, true);
-						if (rect.width < maxSize && rect.height < maxSize){
+						if (rect.width < maxSize && rect.height < maxSize && rect.width > minSize && rect.height > minSize){
 							// Found one eye
 							eyes.push(rect);
 							/*
