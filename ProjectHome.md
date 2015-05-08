@@ -1,0 +1,1 @@
+This project is a skin color and feature based face and facial features detection system. Specifically made for webcams for real time tracking. Currently just started.
